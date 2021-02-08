@@ -1,0 +1,268 @@
+---
+title: "APM466 Assignment 1"
+author: "Zixuan Wu"
+date: "05/02/2021"
+output: html_document
+---
+
+First we convert clean prices into dirty prices.
+```{r setup, include=FALSE}
+# Read our data
+data <- read.csv("bond_data.csv") 
+datam = as.matrix(data) 
+
+# Read dates
+mature_date = as.Date(datam[1:36, 5], format = "%m/%d/%Y")
+next_date = as.Date(datam[1:36, 6], format = "%m/%d/%Y") 
+
+# Compute accrued_interests
+coupon = as.numeric(sub("%", "", datam[,1]))
+now = as.Date("2021-02-01")
+accrued_interest = (182.5 - as.numeric(next_date - now) )*coupon/365
+
+#Then we compute the dirty prices.
+datadirty = datam
+for (i in 7:16){
+  datadirty2[,i] = round(as.numeric(datadirty[,i]) + accrued_interest, digits = 2)
+}
+
+
+```
+
+Then we pick our selected bonds.
+```{r}
+data_selected = datadirty[c(8, 10, 12, 14, 1, 27, 28, 29, 30,32), ]
+```
+
+We write a function to compute YTM of each bond
+```{r}
+YTM_equation <- function(price, coupon, first_pay, times, rate){
+  payment = 0
+  for (i in 1:(times-1)){
+    payment = payment + (coupon/2)/ ((1 + rate/2)^( 2 * (first_pay + 0.5 * i - 0.5)))
+  }
+  payment = payment + (coupon/2 + 100)/((1 + rate/2)^(2*(first_pay + 0.5 * times - 0.5)))
+  return(payment - price)
+}
+
+```
+
+Then compute the yield to maturity of each bond at each date.
+```{r}
+YTM = rep(0, 10)
+for (i in 1:5){
+  price = as.numeric(data_selected[i, 8])
+  coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+  first_pay = 0
+  times = i + 1
+  YTM[i] = round(uniroot(YTM_equation, price = price, coupon = coupon, first_pay = first_pay,
+              times= times, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+}
+for (i in 6:10){
+  price = as.numeric(data_selected[i, 8])
+  coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+  first_pay = 1/12
+  times = i + 1
+  YTM[i] = round(uniroot(YTM_equation, price = price, coupon = coupon, first_pay = first_pay,
+              times= times, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+}
+```
+
+```{r}
+YTM = matrix(rep(0, 100), ncol = 10)
+for (j in 1:10){
+
+  for (i in 1:4){
+  coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+  times = i + 1
+  first_pay = 0
+  price = as.numeric(data_selected[i, j+6])
+  YTM[i, j] = round(uniroot(YTM_equation, price = price, coupon = coupon, first_pay = first_pay,
+              times= times, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+  }
+  coupon = as.numeric(sub("%", "", data_selected[5, 1]))
+  times = 5
+  first_pay = 1/3
+  price = as.numeric(data_selected[5, j+6])
+  YTM[5, j] = round(uniroot(YTM_equation, price = price, coupon = coupon, first_pay = first_pay,
+              times= times, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+  for (i in 6:10){
+  coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+  times = i + 1
+  first_pay = 1/12
+  price = as.numeric(data_selected[i, j+6])
+  YTM[i, j] = round(uniroot(YTM_equation, price = price, coupon = coupon, first_pay = first_pay,
+                         times= times, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+  }
+}
+```
+
+Then plots the yield curves
+```{r}
+x = c(1/2, 1, 3/2, 2, 7/3, 37/12, 43/12, 49/12, 55/12, 61/12 )
+ y = YTM[, 1]
+  f = approxfun(x, y)
+  time = seq(0, 5.5 , 0.01)
+  plot(time, f(time), type = "l", main = "Yield Curve", xlab = "time to matuirty", ylab = "YTM")
+for (i in 2:10){
+  y = YTM[, i]
+  f = approxfun(x, y)
+  time = seq(0, 5.5 , 0.01)
+  lines(time, f(time), type = "l", main = "Yield Curve", xlab = "time to matuirty", ylab = "YTM", col = i)
+}
+
+
+```
+```{r}
+#We first compute the spot rates in the next two years.
+spot_rate = 0
+for (j in 1:10){
+  for (i in 1:4){
+    coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+    price = as.numeric(data_selected[i, j + 6])
+    payment = 0
+    for (k in 1:i){
+      payment = payment + (coupon/2)/(1 + spot_rate[i]/2)^(k - 1)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate = c(spot_rate, round(2* (ratio^(1/i) - 1), digits = 4))
+  }
+  #Interpolating spot rate
+}
+  x = c(0, 1/2, 1, 3/2, 2)
+  f = approxfun(x, spot_rate)
+```
+
+```{r}
+spot_rate = 0
+for (i in 1:4){
+    coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+    price = as.numeric(data_selected[i, 7])
+    payment = 0
+    for (k in 1:i){
+      payment = payment + (coupon/2)/(1 + spot_rate[i]/2)^(k - 1)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate = c(spot_rate, round(2* (ratio^(1/i) - 1), digits = 4))
+}
+#Interpolating spot rate before year 2
+  x = c(0, 1/2, 1, 3/2, 2)
+  f = approxfun(x, spot_rate)
+#Compute the spot rate up to time 7/3
+  spot_rate2 = round(c(f(2/3), f(5/6), f(5/3), f(11/6)), digits=4)
+    coupon = as.numeric(sub("%", "", data_selected[5, 1]))
+    price = as.numeric(data_selected[5, 7])
+    payment = 0
+    for (k in 1:4){
+      payment = payment + (coupon/2)/(1 + spot_rate2[i]/2)^(k - 1/3)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate = c(spot_rate, round(2* (ratio^(3/14) - 1), digits = 4))
+#Interpolating spot rate before year 7/3
+  x = c(0, 1/2, 1, 3/2, 2, 7/3)
+  f = approxfun(x, spot_rate)
+#Compute the spot rate up to time 37/12
+    spot_rate3 = round(c(f(1/12), f(7/12), f(13/12), f(19/12), f(25/12)), digits=4)
+    coupon = as.numeric(sub("%", "", data_selected[6, 1]))
+    price = as.numeric(data_selected[6, 7])
+    payment = 0
+    for (k in 1:5){
+      payment = payment + (coupon/2)/(1 + spot_rate3[i]/2)^(k - 5/6)
+    }
+    Spot_equation <- function(rate){
+      left_payment = (coupon/2)/(1 + (rate + spot_rate3[5])/2  )^(31/6) +((coupon/2) + 100)/(1 + rate  )^(37/6)
+    return(left_payment + payment - price)
+    }
+    rate = round(uniroot(Spot_equation, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+    spot_rate = round(c(spot_rate, (rate + spot_rate3[5])/2, rate), digits = 4)
+#Interpolating spot rate before year 37/12
+  x = c(0, 1/2, 1, 3/2, 2, 7/3, 31/12, 37/12)
+  f = approxfun(x, spot_rate)
+#Compute the rest of the spot rates
+spot_rate4 = round(c(f(1/12), f(7/12), f(13/12), f(19/12), f(25/12), f(31/12), f(37/12)), digits=4)
+for (i in 7:10){
+    coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+    price = as.numeric(data_selected[i, 7])
+    payment = 0
+    for (k in 1:i){
+      payment = payment + (coupon/2)/(1 + spot_rate4[i]/2)^(k - 5/6)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate4 = c(spot_rate4, round(2* (ratio^(1/(k + 1/6)) - 1), digits = 4))
+}
+spot_rate = c(spot_rate, spot_rate4[8:11])
+#Interpolating spot rate before year 37/12
+  x = c(0, 1/2, 1, 3/2, 2, 7/3, 31/12, 37/12, 43/12, 49/12, 55/12, 61/12)
+  f = approxfun(x, spot_rate)
+  plot(time, f(time), type = "l")
+  
+for (j in 2:10){
+  spot_rate = 0
+  for (i in 1:4){
+    coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+    price = as.numeric(data_selected[i, j+6])
+    payment = 0
+    for (k in 1:i){
+      payment = payment + (coupon/2)/(1 + spot_rate[i]/2)^(k - 1)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate = c(spot_rate, round(2* (ratio^(1/i) - 1), digits = 4))
+}
+#Interpolating spot rate before year 2
+  x = c(0, 1/2, 1, 3/2, 2)
+  f = approxfun(x, spot_rate)
+#Compute the spot rate up to time 7/3
+  spot_rate2 = round(c(f(2/3), f(5/6), f(5/3), f(11/6)), digits=4)
+    coupon = as.numeric(sub("%", "", data_selected[5, 1]))
+    price = as.numeric(data_selected[5, j+6])
+    payment = 0
+    for (k in 1:4){
+      payment = payment + (coupon/2)/(1 + spot_rate2[i]/2)^(k - 1/3)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate = c(spot_rate, round(2* (ratio^(3/14) - 1), digits = 4))
+#Interpolating spot rate before year 7/3
+  x = c(0, 1/2, 1, 3/2, 2, 7/3)
+  f = approxfun(x, spot_rate)
+#Compute the spot rate up to time 37/12
+    spot_rate3 = round(c(f(1/12), f(7/12), f(13/12), f(19/12), f(25/12)), digits=4)
+    coupon = as.numeric(sub("%", "", data_selected[6, 1]))
+    price = as.numeric(data_selected[6, j+6])
+    payment = 0
+    for (k in 1:5){
+      payment = payment + (coupon/2)/(1 + spot_rate3[i]/2)^(k - 5/6)
+    }
+    Spot_equation <- function(rate){
+      left_payment = (coupon/2)/(1 + (rate + spot_rate3[5])/2  )^(31/6) +((coupon/2) + 100)/(1 + rate  )^(37/6)
+    return(left_payment + payment - price)
+    }
+    rate = round(uniroot(Spot_equation, interval= c(-1,1), tol = 0.0001)$root, digits = 4)
+    spot_rate = round(c(spot_rate, (rate + spot_rate3[5])/2, rate), digits = 4)
+#Interpolating spot rate before year 37/12
+  x = c(0, 1/2, 1, 3/2, 2, 7/3, 31/12, 37/12)
+  f = approxfun(x, spot_rate)
+#Compute the rest of the spot rates
+spot_rate4 = round(c(f(1/12), f(7/12), f(13/12), f(19/12), f(25/12), f(31/12), f(37/12)), digits=4)
+for (i in 7:10){
+    coupon = as.numeric(sub("%", "", data_selected[i, 1]))
+    price = as.numeric(data_selected[i, j+6])
+    payment = 0
+    for (k in 1:i){
+      payment = payment + (coupon/2)/(1 + spot_rate4[i]/2)^(k - 5/6)
+    }
+    ratio = (coupon/2 + 100)/(price - payment)
+    spot_rate4 = c(spot_rate4, round(2* (ratio^(1/(k + 1/6)) - 1), digits = 4))
+}
+spot_rate = c(spot_rate, spot_rate4[8:11])
+#Interpolating spot rate before year 37/12
+  x = c(0, 1/2, 1, 3/2, 2, 7/3, 31/12, 37/12, 43/12, 49/12, 55/12, 61/12)
+  f = approxfun(x, spot_rate)
+  lines(time, f(time), type = "l", main = "Spot Curve", xlab = "time to matuirty", ylab = "YTM", col = j)
+}
+```
+
+
+```{r}
+```
+
+
